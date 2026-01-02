@@ -16,12 +16,24 @@ const Login = () => {
 
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            emailRedirectTo: window.location.origin + '/dashboard'
+          }
         })
-        if (error) throw error
-        alert('Registrierung erfolgreich! Bitte melden Sie sich an.')
+        
+        if (error) {
+          throw error
+        }
+        
+        // Prüfe ob E-Mail-Bestätigung erforderlich ist
+        if (data.user && !data.session) {
+          alert('Registrierung erfolgreich! Bitte prüfen Sie Ihre E-Mails und bestätigen Sie Ihr Konto, bevor Sie sich anmelden.')
+        } else {
+          alert('Registrierung erfolgreich! Sie werden jetzt angemeldet.')
+        }
         setIsSignUp(false)
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -31,7 +43,25 @@ const Login = () => {
         if (error) throw error
       }
     } catch (error: any) {
-      setError(error.message || 'Ein Fehler ist aufgetreten')
+      // Detailliertere Fehlermeldungen
+      let errorMessage = 'Ein Fehler ist aufgetreten'
+      
+      if (error.message) {
+        errorMessage = error.message
+        // Übersetze häufige Fehlermeldungen
+        if (error.message.includes('User already registered')) {
+          errorMessage = 'Diese E-Mail-Adresse ist bereits registriert. Bitte melden Sie sich an.'
+        } else if (error.message.includes('Email not confirmed')) {
+          errorMessage = 'Bitte bestätigen Sie zuerst Ihre E-Mail-Adresse. Prüfen Sie Ihr Postfach.'
+        } else if (error.message.includes('Invalid login credentials')) {
+          errorMessage = 'Ungültige Anmeldedaten. Bitte überprüfen Sie E-Mail und Passwort.'
+        } else if (error.message.includes('Password should be at least')) {
+          errorMessage = 'Das Passwort muss mindestens 6 Zeichen lang sein.'
+        }
+      }
+      
+      setError(errorMessage)
+      console.error('Auth error:', error)
     } finally {
       setLoading(false)
     }
