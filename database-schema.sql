@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS pflanzenschutzmittel (
 CREATE TABLE IF NOT EXISTS kulturpflanzen (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
+  eppo_code TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

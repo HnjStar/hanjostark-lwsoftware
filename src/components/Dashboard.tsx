@@ -29,33 +29,44 @@ interface User {
   vorname: string
 }
 
+interface Kulturpflanze {
+  name: string
+  eppoCode: string
+}
+
 const Dashboard = ({ session }: { session: any }) => {
   const [user, setUser] = useState<User>({ name: '', vorname: '' })
   const [entries, setEntries] = useState<Entry[]>([])
+  const [filteredEntries, setFilteredEntries] = useState<Entry[]>([])
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(false)
   
-  // Formular-Felder
+  // Filter State
+  const [filterFlaeche, setFilterFlaeche] = useState('')
+  const [filterFid, setFilterFid] = useState('')
+  const [filterDatumVon, setFilterDatumVon] = useState('')
+  const [filterDatumBis, setFilterDatumBis] = useState('')
+  
+  // Formular-Felder (neue Reihenfolge)
   const [artDerVerwendung, setArtDerVerwendung] = useState('Agrarfläche')
-  const [pflanzenschutzmittel, setPflanzenschutzmittel] = useState('')
-  const [zulassungsnummer, setZulassungsnummer] = useState('')
-  const [anwendungsdatum, setAnwendungsdatum] = useState(format(new Date(), 'yyyy-MM-dd'))
-  const [startzeitpunkt, setStartzeitpunkt] = useState(format(new Date(), 'HH:mm'))
-  const [aufwandsmengeWert, setAufwandsmengeWert] = useState('')
-  const [aufwandsmengeEinheit, setAufwandsmengeEinheit] = useState('l')
-  const [kulturpflanze, setKulturpflanze] = useState('')
   const [flaecheAlias, setFlaecheAlias] = useState('')
   const [flaecheFid, setFlaecheFid] = useState('')
   const [flaecheGps, setFlaecheGps] = useState('')
+  const [kulturpflanze, setKulturpflanze] = useState('')
   const [eppoCode, setEppoCode] = useState('')
+  const [pflanzenschutzmittel, setPflanzenschutzmittel] = useState('')
+  const [zulassungsnummer, setZulassungsnummer] = useState('')
+  const [aufwandsmengeWert, setAufwandsmengeWert] = useState('')
+  const [aufwandsmengeEinheit, setAufwandsmengeEinheit] = useState('l')
   const [bbchStadium, setBbchStadium] = useState('')
+  const [anwendungsdatum, setAnwendungsdatum] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [startzeitpunkt, setStartzeitpunkt] = useState(format(new Date(), 'HH:mm'))
   
   // Auswahlfelder
   const [verwendungsarten, setVerwendungsarten] = useState<string[]>(['Agrarfläche', 'geschlossener Raum', 'Saatgut'])
   const [pflanzenschutzmittelListe, setPflanzenschutzmittelListe] = useState<Array<{mittel: string, nummer: string}>>([])
-  const [kulturpflanzenListe, setKulturpflanzenListe] = useState<string[]>([])
+  const [kulturpflanzenListe, setKulturpflanzenListe] = useState<Kulturpflanze[]>([])
   const [flaechenListe, setFlaechenListe] = useState<Array<{alias: string, fid: string, gps: string}>>([])
-  const [eppoCodesListe, setEppoCodesListe] = useState<string[]>([])
   const [bbchStadienListe, setBbchStadienListe] = useState<string[]>([])
   
   // Dialoge für neue Einträge
@@ -66,12 +77,11 @@ const Dashboard = ({ session }: { session: any }) => {
   const [newZulassungsnummer, setNewZulassungsnummer] = useState('')
   const [showNewKulturpflanze, setShowNewKulturpflanze] = useState(false)
   const [newKulturpflanze, setNewKulturpflanze] = useState('')
+  const [newKulturpflanzeEppo, setNewKulturpflanzeEppo] = useState('')
   const [showNewFlaeche, setShowNewFlaeche] = useState(false)
   const [newFlaecheAlias, setNewFlaecheAlias] = useState('')
   const [newFlaecheFid, setNewFlaecheFid] = useState('')
   const [newFlaecheGps, setNewFlaecheGps] = useState('')
-  const [showNewEppo, setShowNewEppo] = useState(false)
-  const [newEppo, setNewEppo] = useState('')
   const [showNewBbch, setShowNewBbch] = useState(false)
   const [newBbch, setNewBbch] = useState('')
 
@@ -81,11 +91,41 @@ const Dashboard = ({ session }: { session: any }) => {
     loadDropdownData()
   }, [session])
 
+  // Filter-Logik
+  useEffect(() => {
+    let filtered = [...entries]
+    
+    if (filterFlaeche) {
+      filtered = filtered.filter(e => 
+        e.flaeche_alias.toLowerCase().includes(filterFlaeche.toLowerCase())
+      )
+    }
+    
+    if (filterFid) {
+      filtered = filtered.filter(e => 
+        e.flaeche_fid?.toLowerCase().includes(filterFid.toLowerCase())
+      )
+    }
+    
+    if (filterDatumVon) {
+      filtered = filtered.filter(e => 
+        new Date(e.anwendungsdatum) >= new Date(filterDatumVon)
+      )
+    }
+    
+    if (filterDatumBis) {
+      filtered = filtered.filter(e => 
+        new Date(e.anwendungsdatum) <= new Date(filterDatumBis)
+      )
+    }
+    
+    setFilteredEntries(filtered)
+  }, [entries, filterFlaeche, filterFid, filterDatumVon, filterDatumBis])
+
   const loadUserData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        // Versuche Benutzerdaten aus der DB zu laden
         const { data } = await supabase
           .from('users')
           .select('name, vorname')
@@ -95,7 +135,6 @@ const Dashboard = ({ session }: { session: any }) => {
         if (data) {
           setUser({ name: data.name || '', vorname: data.vorname || '' })
         } else {
-          // Fallback: Name aus E-Mail extrahieren
           const emailParts = user.email?.split('@')[0].split('.') || []
           setUser({
             vorname: emailParts[0] || '',
@@ -128,13 +167,11 @@ const Dashboard = ({ session }: { session: any }) => {
 
   const loadDropdownData = async () => {
     try {
-      // Lade alle Dropdown-Daten aus der DB
-      const [verwendungen, psm, kulturen, flaechen, eppo, bbch] = await Promise.all([
+      const [verwendungen, psm, kulturen, flaechen, bbch] = await Promise.all([
         supabase.from('verwendungsarten').select('name'),
         supabase.from('pflanzenschutzmittel').select('mittel, zulassungsnummer'),
-        supabase.from('kulturpflanzen').select('name'),
+        supabase.from('kulturpflanzen').select('name, eppo_code'),
         supabase.from('flaechen').select('alias, fid, gps'),
-        supabase.from('eppo_codes').select('code'),
         supabase.from('bbch_stadien').select('stadium')
       ])
 
@@ -152,7 +189,10 @@ const Dashboard = ({ session }: { session: any }) => {
       }
 
       if (kulturen.data) {
-        setKulturpflanzenListe(kulturen.data.map((k: any) => k.name))
+        setKulturpflanzenListe(kulturen.data.map((k: any) => ({
+          name: k.name,
+          eppoCode: k.eppo_code || ''
+        })))
       }
 
       if (flaechen.data) {
@@ -161,10 +201,6 @@ const Dashboard = ({ session }: { session: any }) => {
           fid: f.fid || '',
           gps: f.gps || ''
         })))
-      }
-
-      if (eppo.data) {
-        setEppoCodesListe(eppo.data.map((e: any) => e.code))
       }
 
       if (bbch.data) {
@@ -220,18 +256,18 @@ const Dashboard = ({ session }: { session: any }) => {
 
   const resetForm = () => {
     setArtDerVerwendung('Agrarfläche')
-    setPflanzenschutzmittel('')
-    setZulassungsnummer('')
-    setAnwendungsdatum(format(new Date(), 'yyyy-MM-dd'))
-    setStartzeitpunkt(format(new Date(), 'HH:mm'))
-    setAufwandsmengeWert('')
-    setAufwandsmengeEinheit('l')
-    setKulturpflanze('')
     setFlaecheAlias('')
     setFlaecheFid('')
     setFlaecheGps('')
+    setKulturpflanze('')
     setEppoCode('')
+    setPflanzenschutzmittel('')
+    setZulassungsnummer('')
+    setAufwandsmengeWert('')
+    setAufwandsmengeEinheit('l')
     setBbchStadium('')
+    setAnwendungsdatum(format(new Date(), 'yyyy-MM-dd'))
+    setStartzeitpunkt(format(new Date(), 'HH:mm'))
   }
 
   const handleAddVerwendung = async () => {
@@ -278,18 +314,23 @@ const Dashboard = ({ session }: { session: any }) => {
   }
 
   const handleAddKulturpflanze = async () => {
-    if (!newKulturpflanze.trim()) return
+    if (!newKulturpflanze.trim() || !newKulturpflanzeEppo.trim()) return
     
     try {
       const { error } = await supabase
         .from('kulturpflanzen')
-        .insert([{ name: newKulturpflanze }])
+        .insert([{ name: newKulturpflanze, eppo_code: newKulturpflanzeEppo }])
       
       if (error) throw error
       
-      setKulturpflanzenListe([...kulturpflanzenListe, newKulturpflanze])
+      setKulturpflanzenListe([...kulturpflanzenListe, {
+        name: newKulturpflanze,
+        eppoCode: newKulturpflanzeEppo
+      }])
       setKulturpflanze(newKulturpflanze)
+      setEppoCode(newKulturpflanzeEppo)
       setNewKulturpflanze('')
+      setNewKulturpflanzeEppo('')
       setShowNewKulturpflanze(false)
     } catch (error: any) {
       alert('Fehler: ' + error.message)
@@ -323,25 +364,6 @@ const Dashboard = ({ session }: { session: any }) => {
     }
   }
 
-  const handleAddEppo = async () => {
-    if (!newEppo.trim()) return
-    
-    try {
-      const { error } = await supabase
-        .from('eppo_codes')
-        .insert([{ code: newEppo }])
-      
-      if (error) throw error
-      
-      setEppoCodesListe([...eppoCodesListe, newEppo])
-      setEppoCode(newEppo)
-      setNewEppo('')
-      setShowNewEppo(false)
-    } catch (error: any) {
-      alert('Fehler: ' + error.message)
-    }
-  }
-
   const handleAddBbch = async () => {
     if (!newBbch.trim()) return
     
@@ -370,6 +392,14 @@ const Dashboard = ({ session }: { session: any }) => {
     }
   }
 
+  const handleKulturpflanzeSelect = (name: string) => {
+    const kultur = kulturpflanzenListe.find(k => k.name === name)
+    if (kultur) {
+      setKulturpflanze(kultur.name)
+      setEppoCode(kultur.eppoCode)
+    }
+  }
+
   const handlePflanzenschutzmittelSelect = (mittel: string) => {
     const psm = pflanzenschutzmittelListe.find(p => p.mittel === mittel)
     if (psm) {
@@ -382,23 +412,23 @@ const Dashboard = ({ session }: { session: any }) => {
     await supabase.auth.signOut()
   }
 
-  const exportToExcel = async (selectedEntries: Entry[] = entries) => {
+  const exportToExcel = async (selectedEntries: Entry[] = filteredEntries.length > 0 ? filteredEntries : entries) => {
     try {
       const XLSX = await import('xlsx')
       
       const data = selectedEntries.map(entry => ({
         'Art der Verwendung': entry.art_der_verwendung,
-        'Pflanzenschutzmittel': entry.pflanzenschutzmittel,
-        'Zulassungsnummer': entry.zulassungsnummer,
-        'Anwendungsdatum': entry.anwendungsdatum,
-        'Startzeitpunkt': entry.startzeitpunkt,
-        'Aufwandsmenge': `${entry.aufwandsmenge_wert} ${entry.aufwandsmenge_einheit}`,
-        'Kulturpflanze': entry.kulturpflanze,
         'Fläche (Alias)': entry.flaeche_alias,
         'Flurstücksnummer (FID)': entry.flaeche_fid,
         'GPS-Daten': entry.flaeche_gps,
+        'Kulturpflanze': entry.kulturpflanze,
         'EPPO Code': entry.eppo_code,
+        'Pflanzenschutzmittel': entry.pflanzenschutzmittel,
+        'Zulassungsnummer': entry.zulassungsnummer,
+        'Aufwandsmenge': `${entry.aufwandsmenge_wert} ${entry.aufwandsmenge_einheit}`,
         'BBCH Stadium': entry.bbch_stadium,
+        'Anwendungsdatum': entry.anwendungsdatum,
+        'Startzeitpunkt': entry.startzeitpunkt,
         'Name': entry.user_name,
         'Vorname': entry.user_vorname,
         'Erstellt am': entry.created_at ? format(new Date(entry.created_at), 'dd.MM.yyyy HH:mm', { locale: de }) : ''
@@ -430,7 +460,7 @@ const Dashboard = ({ session }: { session: any }) => {
           <button onClick={() => setShowForm(!showForm)} className="action-button">
             {showForm ? 'Formular ausblenden' : 'Neuer Eintrag'}
           </button>
-          <button onClick={() => exportToExcel()} className="action-button secondary">
+          <button onClick={() => exportToExcel(entries)} className="action-button secondary">
             Alle exportieren (Excel)
           </button>
         </div>
@@ -439,6 +469,7 @@ const Dashboard = ({ session }: { session: any }) => {
           <div className="form-container">
             <h2>Neuer Eintrag</h2>
             <form onSubmit={handleSubmit}>
+              {/* 1. Art der Verwendung */}
               <div className="form-row">
                 <div className="form-group">
                   <label>Art der Verwendung *</label>
@@ -480,151 +511,7 @@ const Dashboard = ({ session }: { session: any }) => {
                   </div>
                 )}
 
-                <div className="form-group">
-                  <label>Pflanzenschutzmittel *</label>
-                  <div className="select-with-add">
-                    <select
-                      value={pflanzenschutzmittel}
-                      onChange={(e) => handlePflanzenschutzmittelSelect(e.target.value)}
-                      required
-                    >
-                      <option value="">Bitte wählen</option>
-                      {pflanzenschutzmittelListe.map((p, i) => (
-                        <option key={i} value={p.mittel}>{p.mittel}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPflanzenschutzmittel(true)}
-                      className="add-button"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                {showNewPflanzenschutzmittel && (
-                  <div className="modal">
-                    <div className="modal-content">
-                      <h3>Neues Pflanzenschutzmittel hinzufügen</h3>
-                      <input
-                        type="text"
-                        value={newPflanzenschutzmittel}
-                        onChange={(e) => setNewPflanzenschutzmittel(e.target.value)}
-                        placeholder="Pflanzenschutzmittel"
-                      />
-                      <input
-                        type="text"
-                        value={newZulassungsnummer}
-                        onChange={(e) => setNewZulassungsnummer(e.target.value)}
-                        placeholder="Zulassungsnummer"
-                      />
-                      <div className="modal-buttons">
-                        <button type="button" onClick={handleAddPflanzenschutzmittel}>Hinzufügen</button>
-                        <button type="button" onClick={() => setShowNewPflanzenschutzmittel(false)}>Abbrechen</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="form-group">
-                  <label>Zulassungsnummer *</label>
-                  <input
-                    type="text"
-                    value={zulassungsnummer}
-                    onChange={(e) => setZulassungsnummer(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Anwendungsdatum *</label>
-                  <input
-                    type="date"
-                    value={anwendungsdatum}
-                    onChange={(e) => setAnwendungsdatum(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Startzeitpunkt *</label>
-                  <input
-                    type="time"
-                    value={startzeitpunkt}
-                    onChange={(e) => setStartzeitpunkt(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Aufwandsmenge *</label>
-                  <div className="amount-input">
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={aufwandsmengeWert}
-                      onChange={(e) => setAufwandsmengeWert(e.target.value)}
-                      placeholder="Wert"
-                      required
-                    />
-                    <select
-                      value={aufwandsmengeEinheit}
-                      onChange={(e) => setAufwandsmengeEinheit(e.target.value)}
-                    >
-                      <option value="g">g</option>
-                      <option value="ml">ml</option>
-                      <option value="l">l</option>
-                      <option value="kg">kg</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Behandelte Kulturpflanze/Pflanzenprodukt *</label>
-                  <div className="select-with-add">
-                    <select
-                      value={kulturpflanze}
-                      onChange={(e) => setKulturpflanze(e.target.value)}
-                      required
-                    >
-                      <option value="">Bitte wählen</option>
-                      {kulturpflanzenListe.map((k, i) => (
-                        <option key={i} value={k}>{k}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => setShowNewKulturpflanze(true)}
-                      className="add-button"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                {showNewKulturpflanze && (
-                  <div className="modal">
-                    <div className="modal-content">
-                      <h3>Neue Kulturpflanze hinzufügen</h3>
-                      <input
-                        type="text"
-                        value={newKulturpflanze}
-                        onChange={(e) => setNewKulturpflanze(e.target.value)}
-                        placeholder="Kulturpflanze (z.B. Raps)"
-                      />
-                      <div className="modal-buttons">
-                        <button type="button" onClick={handleAddKulturpflanze}>Hinzufügen</button>
-                        <button type="button" onClick={() => setShowNewKulturpflanze(false)}>Abbrechen</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
+                {/* 2. Fläche */}
                 <div className="form-group">
                   <label>Behandelte Fläche (FID/Flurstücksnummer oder GPS) *</label>
                   <div className="select-with-add">
@@ -685,23 +572,78 @@ const Dashboard = ({ session }: { session: any }) => {
                 )}
               </div>
 
+              {/* 3. Kulturpflanze mit EPPO Code */}
               <div className="form-row">
                 <div className="form-group">
-                  <label>EPPO Code *</label>
+                  <label>Behandelte Kulturpflanze/Pflanzenprodukt *</label>
                   <div className="select-with-add">
                     <select
-                      value={eppoCode}
-                      onChange={(e) => setEppoCode(e.target.value)}
+                      value={kulturpflanze}
+                      onChange={(e) => handleKulturpflanzeSelect(e.target.value)}
                       required
                     >
                       <option value="">Bitte wählen</option>
-                      {eppoCodesListe.map((e, i) => (
-                        <option key={i} value={e}>{e}</option>
+                      {kulturpflanzenListe.map((k, i) => (
+                        <option key={i} value={k.name}>{k.name}</option>
                       ))}
                     </select>
                     <button
                       type="button"
-                      onClick={() => setShowNewEppo(true)}
+                      onClick={() => setShowNewKulturpflanze(true)}
+                      className="add-button"
+                    >
+                      +
+                    </button>
+                  </div>
+                  {eppoCode && (
+                    <div className="flaeche-details">
+                      <small>EPPO Code: {eppoCode}</small>
+                    </div>
+                  )}
+                </div>
+
+                {showNewKulturpflanze && (
+                  <div className="modal">
+                    <div className="modal-content">
+                      <h3>Neue Kulturpflanze hinzufügen</h3>
+                      <input
+                        type="text"
+                        value={newKulturpflanze}
+                        onChange={(e) => setNewKulturpflanze(e.target.value)}
+                        placeholder="Kulturpflanze (z.B. Raps)"
+                      />
+                      <input
+                        type="text"
+                        value={newKulturpflanzeEppo}
+                        onChange={(e) => setNewKulturpflanzeEppo(e.target.value)}
+                        placeholder="EPPO Code (z.B. BRSNW)"
+                        required
+                      />
+                      <div className="modal-buttons">
+                        <button type="button" onClick={handleAddKulturpflanze}>Hinzufügen</button>
+                        <button type="button" onClick={() => setShowNewKulturpflanze(false)}>Abbrechen</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Pflanzenschutzmittel */}
+                <div className="form-group">
+                  <label>Pflanzenschutzmittel *</label>
+                  <div className="select-with-add">
+                    <select
+                      value={pflanzenschutzmittel}
+                      onChange={(e) => handlePflanzenschutzmittelSelect(e.target.value)}
+                      required
+                    >
+                      <option value="">Bitte wählen</option>
+                      {pflanzenschutzmittelListe.map((p, i) => (
+                        <option key={i} value={p.mittel}>{p.mittel}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPflanzenschutzmittel(true)}
                       className="add-button"
                     >
                       +
@@ -709,24 +651,67 @@ const Dashboard = ({ session }: { session: any }) => {
                   </div>
                 </div>
 
-                {showNewEppo && (
+                {showNewPflanzenschutzmittel && (
                   <div className="modal">
                     <div className="modal-content">
-                      <h3>Neuen EPPO Code hinzufügen</h3>
+                      <h3>Neues Pflanzenschutzmittel hinzufügen</h3>
                       <input
                         type="text"
-                        value={newEppo}
-                        onChange={(e) => setNewEppo(e.target.value)}
-                        placeholder="EPPO Code"
+                        value={newPflanzenschutzmittel}
+                        onChange={(e) => setNewPflanzenschutzmittel(e.target.value)}
+                        placeholder="Pflanzenschutzmittel"
+                      />
+                      <input
+                        type="text"
+                        value={newZulassungsnummer}
+                        onChange={(e) => setNewZulassungsnummer(e.target.value)}
+                        placeholder="Zulassungsnummer"
                       />
                       <div className="modal-buttons">
-                        <button type="button" onClick={handleAddEppo}>Hinzufügen</button>
-                        <button type="button" onClick={() => setShowNewEppo(false)}>Abbrechen</button>
+                        <button type="button" onClick={handleAddPflanzenschutzmittel}>Hinzufügen</button>
+                        <button type="button" onClick={() => setShowNewPflanzenschutzmittel(false)}>Abbrechen</button>
                       </div>
                     </div>
                   </div>
                 )}
 
+                <div className="form-group">
+                  <label>Zulassungsnummer *</label>
+                  <input
+                    type="text"
+                    value={zulassungsnummer}
+                    onChange={(e) => setZulassungsnummer(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* 5. Aufwandsmenge */}
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Aufwandsmenge *</label>
+                  <div className="amount-input">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={aufwandsmengeWert}
+                      onChange={(e) => setAufwandsmengeWert(e.target.value)}
+                      placeholder="Wert"
+                      required
+                    />
+                    <select
+                      value={aufwandsmengeEinheit}
+                      onChange={(e) => setAufwandsmengeEinheit(e.target.value)}
+                    >
+                      <option value="g">g</option>
+                      <option value="ml">ml</option>
+                      <option value="l">l</option>
+                      <option value="kg">kg</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* 6. BBCH Stadium */}
                 <div className="form-group">
                   <label>BBCH Stadium der Kultur *</label>
                   <div className="select-with-add">
@@ -768,6 +753,30 @@ const Dashboard = ({ session }: { session: any }) => {
                   </div>
                 )}
 
+                {/* Datum und Zeit */}
+                <div className="form-group">
+                  <label>Anwendungsdatum *</label>
+                  <input
+                    type="date"
+                    value={anwendungsdatum}
+                    onChange={(e) => setAnwendungsdatum(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Startzeitpunkt *</label>
+                  <input
+                    type="time"
+                    value={startzeitpunkt}
+                    onChange={(e) => setStartzeitpunkt(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Name und Vorname */}
+              <div className="form-row">
                 <div className="form-group">
                   <label>Name</label>
                   <input type="text" value={user.name} disabled />
@@ -793,8 +802,73 @@ const Dashboard = ({ session }: { session: any }) => {
 
         <div className="entries-section">
           <h2>Übersicht der Einträge</h2>
+          
+          {/* Filter-Section */}
+          <div className="filter-section">
+            <h3>Filter</h3>
+            <div className="filter-row">
+              <div className="filter-group">
+                <label>Fläche (Alias)</label>
+                <input
+                  type="text"
+                  value={filterFlaeche}
+                  onChange={(e) => setFilterFlaeche(e.target.value)}
+                  placeholder="Fläche suchen..."
+                />
+              </div>
+              <div className="filter-group">
+                <label>FID/Flurstücksnummer</label>
+                <input
+                  type="text"
+                  value={filterFid}
+                  onChange={(e) => setFilterFid(e.target.value)}
+                  placeholder="FID suchen..."
+                />
+              </div>
+              <div className="filter-group">
+                <label>Von Datum</label>
+                <input
+                  type="date"
+                  value={filterDatumVon}
+                  onChange={(e) => setFilterDatumVon(e.target.value)}
+                />
+              </div>
+              <div className="filter-group">
+                <label>Bis Datum</label>
+                <input
+                  type="date"
+                  value={filterDatumBis}
+                  onChange={(e) => setFilterDatumBis(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="filter-actions">
+              <button
+                onClick={() => {
+                  setFilterFlaeche('')
+                  setFilterFid('')
+                  setFilterDatumVon('')
+                  setFilterDatumBis('')
+                }}
+                className="filter-reset-button"
+              >
+                Filter zurücksetzen
+              </button>
+              <button
+                onClick={() => exportToExcel(filteredEntries)}
+                className="filter-export-button"
+                disabled={filteredEntries.length === 0}
+              >
+                Gefilterte exportieren ({filteredEntries.length})
+              </button>
+            </div>
+            <p className="filter-info">
+              {filteredEntries.length} von {entries.length} Einträgen
+            </p>
+          </div>
+
           <div className="entries-grid">
-            {entries.map((entry) => (
+            {filteredEntries.map((entry) => (
               <div key={entry.id} className="entry-card">
                 <div className="entry-header">
                   <h3>{entry.kulturpflanze}</h3>
@@ -809,12 +883,19 @@ const Dashboard = ({ session }: { session: any }) => {
                 <div className="entry-details">
                   <p><strong>Datum:</strong> {format(new Date(entry.anwendungsdatum), 'dd.MM.yyyy', { locale: de })}</p>
                   <p><strong>Zeit:</strong> {entry.startzeitpunkt}</p>
-                  <p><strong>Mittel:</strong> {entry.pflanzenschutzmittel}</p>
                   <p><strong>Fläche:</strong> {entry.flaeche_alias}</p>
+                  {entry.flaeche_fid && <p><strong>FID:</strong> {entry.flaeche_fid}</p>}
+                  <p><strong>Mittel:</strong> {entry.pflanzenschutzmittel}</p>
                   <p><strong>Menge:</strong> {entry.aufwandsmenge_wert} {entry.aufwandsmenge_einheit}</p>
+                  <p><strong>EPPO:</strong> {entry.eppo_code}</p>
                 </div>
               </div>
             ))}
+            {filteredEntries.length === 0 && entries.length > 0 && (
+              <div className="no-entries">
+                <p>Keine Einträge gefunden, die den Filterkriterien entsprechen.</p>
+              </div>
+            )}
             {entries.length === 0 && (
               <div className="no-entries">
                 <p>Noch keine Einträge vorhanden.</p>
