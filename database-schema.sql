@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS verwendungsarten (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
+  aktiv BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -21,6 +22,7 @@ CREATE TABLE IF NOT EXISTS pflanzenschutzmittel (
   id SERIAL PRIMARY KEY,
   mittel TEXT NOT NULL,
   zulassungsnummer TEXT NOT NULL,
+  aktiv BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(mittel, zulassungsnummer)
 );
@@ -30,6 +32,7 @@ CREATE TABLE IF NOT EXISTS kulturpflanzen (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
   eppo_code TEXT,
+  aktiv BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -39,6 +42,7 @@ CREATE TABLE IF NOT EXISTS flaechen (
   alias TEXT NOT NULL UNIQUE,
   fid TEXT,
   gps TEXT,
+  aktiv BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -53,6 +57,7 @@ CREATE TABLE IF NOT EXISTS eppo_codes (
 CREATE TABLE IF NOT EXISTS bbch_stadien (
   id SERIAL PRIMARY KEY,
   stadium TEXT NOT NULL UNIQUE,
+  aktiv BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

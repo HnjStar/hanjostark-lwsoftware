@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { format } from 'date-fns'
 import { de } from 'date-fns/locale'
@@ -30,8 +30,37 @@ interface User {
 }
 
 interface Kulturpflanze {
+  id: number
   name: string
   eppoCode: string
+  aktiv: boolean
+}
+
+interface Verwendungsart {
+  id: number
+  name: string
+  aktiv: boolean
+}
+
+interface PflanzenschutzmittelItem {
+  id: number
+  mittel: string
+  nummer: string
+  aktiv: boolean
+}
+
+interface Flaeche {
+  id: number
+  alias: string
+  fid: string
+  gps: string
+  aktiv: boolean
+}
+
+interface BbchStadium {
+  id: number
+  stadium: string
+  aktiv: boolean
 }
 
 const Dashboard = ({ session }: { session: any }) => {
@@ -62,12 +91,16 @@ const Dashboard = ({ session }: { session: any }) => {
   const [anwendungsdatum, setAnwendungsdatum] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [startzeitpunkt, setStartzeitpunkt] = useState(format(new Date(), 'HH:mm'))
   
-  // Auswahlfelder
-  const [verwendungsarten, setVerwendungsarten] = useState<string[]>(['Agrarfläche', 'geschlossener Raum', 'Saatgut'])
-  const [pflanzenschutzmittelListe, setPflanzenschutzmittelListe] = useState<Array<{mittel: string, nummer: string}>>([])
+  // Auswahlfelder (mit id und aktiv für Verwaltung)
+  const [verwendungsarten, setVerwendungsarten] = useState<Verwendungsart[]>([])
+  const [pflanzenschutzmittelListe, setPflanzenschutzmittelListe] = useState<PflanzenschutzmittelItem[]>([])
   const [kulturpflanzenListe, setKulturpflanzenListe] = useState<Kulturpflanze[]>([])
-  const [flaechenListe, setFlaechenListe] = useState<Array<{alias: string, fid: string, gps: string}>>([])
-  const [bbchStadienListe, setBbchStadienListe] = useState<string[]>([])
+  const [flaechenListe, setFlaechenListe] = useState<Flaeche[]>([])
+  const [bbchStadienListe, setBbchStadienListe] = useState<BbchStadium[]>([])
+  
+  // Listen verwalten Modal
+  const [showListenVerwalten, setShowListenVerwalten] = useState(false)
+  const [verwaltungTab, setVerwaltungTab] = useState<'verwendung' | 'flaeche' | 'kultur' | 'psm' | 'bbch'>('verwendung')
   
   // Dialoge für neue Einträge
   const [showNewVerwendung, setShowNewVerwendung] = useState(false)
@@ -90,6 +123,13 @@ const Dashboard = ({ session }: { session: any }) => {
     loadEntries()
     loadDropdownData()
   }, [session])
+
+  // Standardwert setzen, wenn gewählter Wert nicht mehr aktiv ist
+  useEffect(() => {
+    if (aktiveVerwendungen.length > 0 && !aktiveVerwendungen.some(v => v.name === artDerVerwendung)) {
+      setArtDerVerwendung(aktiveVerwendungen[0].name)
+    }
+  }, [aktiveVerwendungen, artDerVerwendung])
 
   // Filter-Logik
   useEffect(() => {
@@ -168,43 +208,55 @@ const Dashboard = ({ session }: { session: any }) => {
   const loadDropdownData = async () => {
     try {
       const [verwendungen, psm, kulturen, flaechen, bbch] = await Promise.all([
-        supabase.from('verwendungsarten').select('name'),
-        supabase.from('pflanzenschutzmittel').select('mittel, zulassungsnummer'),
-        supabase.from('kulturpflanzen').select('name, eppo_code'),
-        supabase.from('flaechen').select('alias, fid, gps'),
-        supabase.from('bbch_stadien').select('stadium')
+        supabase.from('verwendungsarten').select('id, name, aktiv'),
+        supabase.from('pflanzenschutzmittel').select('id, mittel, zulassungsnummer, aktiv'),
+        supabase.from('kulturpflanzen').select('id, name, eppo_code, aktiv'),
+        supabase.from('flaechen').select('id, alias, fid, gps, aktiv'),
+        supabase.from('bbch_stadien').select('id, stadium, aktiv')
       ])
 
       if (verwendungen.data) {
-        const defaultVerwendungen = ['Agrarfläche', 'geschlossener Raum', 'Saatgut']
-        const dbVerwendungen = verwendungen.data.map((v: any) => v.name)
-        setVerwendungsarten([...new Set([...defaultVerwendungen, ...dbVerwendungen])])
+        setVerwendungsarten(verwendungen.data.map((v: any) => ({
+          id: v.id,
+          name: v.name,
+          aktiv: v.aktiv !== false
+        })).sort((a, b) => a.name.localeCompare(b.name, 'de')))
       }
 
       if (psm.data) {
         setPflanzenschutzmittelListe(psm.data.map((p: any) => ({
+          id: p.id,
           mittel: p.mittel,
-          nummer: p.zulassungsnummer
-        })))
+          nummer: p.zulassungsnummer,
+          aktiv: p.aktiv !== false
+        })).sort((a, b) => a.mittel.localeCompare(b.mittel, 'de')))
       }
 
       if (kulturen.data) {
         setKulturpflanzenListe(kulturen.data.map((k: any) => ({
+          id: k.id,
           name: k.name,
-          eppoCode: k.eppo_code || ''
-        })))
+          eppoCode: k.eppo_code || '',
+          aktiv: k.aktiv !== false
+        })).sort((a, b) => a.name.localeCompare(b.name, 'de')))
       }
 
       if (flaechen.data) {
         setFlaechenListe(flaechen.data.map((f: any) => ({
+          id: f.id,
           alias: f.alias,
           fid: f.fid || '',
-          gps: f.gps || ''
-        })))
+          gps: f.gps || '',
+          aktiv: f.aktiv !== false
+        })).sort((a, b) => a.alias.localeCompare(b.alias, 'de')))
       }
 
       if (bbch.data) {
-        setBbchStadienListe(bbch.data.map((b: any) => b.stadium))
+        setBbchStadienListe(bbch.data.map((b: any) => ({
+          id: b.id,
+          stadium: b.stadium,
+          aktiv: b.aktiv !== false
+        })).sort((a, b) => a.stadium.localeCompare(b.stadium, 'de')))
       }
     } catch (error) {
       console.error('Fehler beim Laden der Dropdown-Daten:', error)
@@ -255,7 +307,7 @@ const Dashboard = ({ session }: { session: any }) => {
   }
 
   const resetForm = () => {
-    setArtDerVerwendung('Agrarfläche')
+    setArtDerVerwendung(aktiveVerwendungen[0]?.name ?? 'Agrarfläche')
     setFlaecheAlias('')
     setFlaecheFid('')
     setFlaecheGps('')
@@ -280,10 +332,10 @@ const Dashboard = ({ session }: { session: any }) => {
       
       if (error) throw error
       
-      setVerwendungsarten([...verwendungsarten, newVerwendung])
       setArtDerVerwendung(newVerwendung)
       setNewVerwendung('')
       setShowNewVerwendung(false)
+      loadDropdownData()
     } catch (error: any) {
       alert('Fehler: ' + error.message)
     }
@@ -299,15 +351,12 @@ const Dashboard = ({ session }: { session: any }) => {
       
       if (error) throw error
       
-      setPflanzenschutzmittelListe([...pflanzenschutzmittelListe, {
-        mittel: newPflanzenschutzmittel,
-        nummer: newZulassungsnummer
-      }])
       setPflanzenschutzmittel(newPflanzenschutzmittel)
       setZulassungsnummer(newZulassungsnummer)
       setNewPflanzenschutzmittel('')
       setNewZulassungsnummer('')
       setShowNewPflanzenschutzmittel(false)
+      loadDropdownData()
     } catch (error: any) {
       alert('Fehler: ' + error.message)
     }
@@ -323,15 +372,12 @@ const Dashboard = ({ session }: { session: any }) => {
       
       if (error) throw error
       
-      setKulturpflanzenListe([...kulturpflanzenListe, {
-        name: newKulturpflanze,
-        eppoCode: newKulturpflanzeEppo
-      }])
       setKulturpflanze(newKulturpflanze)
       setEppoCode(newKulturpflanzeEppo)
       setNewKulturpflanze('')
       setNewKulturpflanzeEppo('')
       setShowNewKulturpflanze(false)
+      loadDropdownData()
     } catch (error: any) {
       alert('Fehler: ' + error.message)
     }
@@ -347,11 +393,6 @@ const Dashboard = ({ session }: { session: any }) => {
       
       if (error) throw error
       
-      setFlaechenListe([...flaechenListe, {
-        alias: newFlaecheAlias,
-        fid: newFlaecheFid,
-        gps: newFlaecheGps
-      }])
       setFlaecheAlias(newFlaecheAlias)
       setFlaecheFid(newFlaecheFid)
       setFlaecheGps(newFlaecheGps)
@@ -359,6 +400,7 @@ const Dashboard = ({ session }: { session: any }) => {
       setNewFlaecheFid('')
       setNewFlaecheGps('')
       setShowNewFlaeche(false)
+      loadDropdownData()
     } catch (error: any) {
       alert('Fehler: ' + error.message)
     }
@@ -374,10 +416,24 @@ const Dashboard = ({ session }: { session: any }) => {
       
       if (error) throw error
       
-      setBbchStadienListe([...bbchStadienListe, newBbch])
       setBbchStadium(newBbch)
       setNewBbch('')
       setShowNewBbch(false)
+      loadDropdownData()
+    } catch (error: any) {
+      alert('Fehler: ' + error.message)
+    }
+  }
+
+  const toggleAktiv = async (tabelle: string, id: number, aktiv: boolean) => {
+    try {
+      const { error } = await supabase
+        .from(tabelle)
+        .update({ aktiv })
+        .eq('id', id)
+      
+      if (error) throw error
+      loadDropdownData()
     } catch (error: any) {
       alert('Fehler: ' + error.message)
     }
@@ -407,6 +463,13 @@ const Dashboard = ({ session }: { session: any }) => {
       setZulassungsnummer(psm.nummer)
     }
   }
+
+  // Nur aktive Einträge für Dropdowns (alphabetisch bereits sortiert)
+  const aktiveVerwendungen = useMemo(() => verwendungsarten.filter(v => v.aktiv), [verwendungsarten])
+  const aktiveFlaechen = useMemo(() => flaechenListe.filter(f => f.aktiv), [flaechenListe])
+  const aktiveKulturpflanzen = useMemo(() => kulturpflanzenListe.filter(k => k.aktiv), [kulturpflanzenListe])
+  const aktivePsm = useMemo(() => pflanzenschutzmittelListe.filter(p => p.aktiv), [pflanzenschutzmittelListe])
+  const aktiveBbch = useMemo(() => bbchStadienListe.filter(b => b.aktiv), [bbchStadienListe])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -460,10 +523,110 @@ const Dashboard = ({ session }: { session: any }) => {
           <button onClick={() => setShowForm(!showForm)} className="action-button">
             {showForm ? 'Formular ausblenden' : 'Neuer Eintrag'}
           </button>
+          <button onClick={() => setShowListenVerwalten(true)} className="action-button settings">
+            Listen verwalten
+          </button>
           <button onClick={() => exportToExcel(entries)} className="action-button secondary">
             Alle exportieren (Excel)
           </button>
         </div>
+
+        {showListenVerwalten && (
+          <div className="modal">
+            <div className="modal-content listen-verwalten">
+              <h3>Listen verwalten – Aktiv/Inaktiv</h3>
+              <p className="listen-hint">Inaktive Einträge erscheinen nicht mehr in den Auswahlfeldern.</p>
+              
+              <div className="verwaltung-tabs">
+                {(['verwendung', 'flaeche', 'kultur', 'psm', 'bbch'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    className={`tab-btn ${verwaltungTab === tab ? 'active' : ''}`}
+                    onClick={() => setVerwaltungTab(tab)}
+                  >
+                    {tab === 'verwendung' && 'Verwendungsarten'}
+                    {tab === 'flaeche' && 'Flächen'}
+                    {tab === 'kultur' && 'Kulturpflanzen'}
+                    {tab === 'psm' && 'Pflanzenschutzmittel'}
+                    {tab === 'bbch' && 'BBCH Stadien'}
+                  </button>
+                ))}
+              </div>
+
+              <div className="verwaltung-liste">
+                {verwaltungTab === 'verwendung' && verwendungsarten.map(v => (
+                  <div key={v.id} className={`listen-item ${!v.aktiv ? 'inaktiv' : ''}`}>
+                    <span>{v.name}</span>
+                    <label className="toggle-label">
+                      <input
+                        type="checkbox"
+                        checked={v.aktiv}
+                        onChange={() => toggleAktiv('verwendungsarten', v.id, !v.aktiv)}
+                      />
+                      {v.aktiv ? 'Aktiv' : 'Inaktiv'}
+                    </label>
+                  </div>
+                ))}
+                {verwaltungTab === 'flaeche' && flaechenListe.map(f => (
+                  <div key={f.id} className={`listen-item ${!f.aktiv ? 'inaktiv' : ''}`}>
+                    <span>{f.alias}{f.fid && ` (${f.fid})`}</span>
+                    <label className="toggle-label">
+                      <input
+                        type="checkbox"
+                        checked={f.aktiv}
+                        onChange={() => toggleAktiv('flaechen', f.id, !f.aktiv)}
+                      />
+                      {f.aktiv ? 'Aktiv' : 'Inaktiv'}
+                    </label>
+                  </div>
+                ))}
+                {verwaltungTab === 'kultur' && kulturpflanzenListe.map(k => (
+                  <div key={k.id} className={`listen-item ${!k.aktiv ? 'inaktiv' : ''}`}>
+                    <span>{k.name}{k.eppoCode && ` (${k.eppoCode})`}</span>
+                    <label className="toggle-label">
+                      <input
+                        type="checkbox"
+                        checked={k.aktiv}
+                        onChange={() => toggleAktiv('kulturpflanzen', k.id, !k.aktiv)}
+                      />
+                      {k.aktiv ? 'Aktiv' : 'Inaktiv'}
+                    </label>
+                  </div>
+                ))}
+                {verwaltungTab === 'psm' && pflanzenschutzmittelListe.map(p => (
+                  <div key={p.id} className={`listen-item ${!p.aktiv ? 'inaktiv' : ''}`}>
+                    <span>{p.mittel} ({p.nummer})</span>
+                    <label className="toggle-label">
+                      <input
+                        type="checkbox"
+                        checked={p.aktiv}
+                        onChange={() => toggleAktiv('pflanzenschutzmittel', p.id, !p.aktiv)}
+                      />
+                      {p.aktiv ? 'Aktiv' : 'Inaktiv'}
+                    </label>
+                  </div>
+                ))}
+                {verwaltungTab === 'bbch' && bbchStadienListe.map(b => (
+                  <div key={b.id} className={`listen-item ${!b.aktiv ? 'inaktiv' : ''}`}>
+                    <span>{b.stadium}</span>
+                    <label className="toggle-label">
+                      <input
+                        type="checkbox"
+                        checked={b.aktiv}
+                        onChange={() => toggleAktiv('bbch_stadien', b.id, !b.aktiv)}
+                      />
+                      {b.aktiv ? 'Aktiv' : 'Inaktiv'}
+                    </label>
+                  </div>
+                ))}
+              </div>
+
+              <div className="modal-buttons">
+                <button type="button" onClick={() => setShowListenVerwalten(false)}>Schließen</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showForm && (
           <div className="form-container">
@@ -479,8 +642,8 @@ const Dashboard = ({ session }: { session: any }) => {
                       onChange={(e) => setArtDerVerwendung(e.target.value)}
                       required
                     >
-                      {verwendungsarten.map(v => (
-                        <option key={v} value={v}>{v}</option>
+                      {aktiveVerwendungen.map(v => (
+                        <option key={v.id} value={v.name}>{v.name}</option>
                       ))}
                     </select>
                     <button
@@ -521,8 +684,8 @@ const Dashboard = ({ session }: { session: any }) => {
                       required
                     >
                       <option value="">Bitte wählen</option>
-                      {flaechenListe.map((f, i) => (
-                        <option key={i} value={f.alias}>{f.alias}</option>
+                      {aktiveFlaechen.map(f => (
+                        <option key={f.id} value={f.alias}>{f.alias}</option>
                       ))}
                     </select>
                     <button
@@ -583,8 +746,8 @@ const Dashboard = ({ session }: { session: any }) => {
                       required
                     >
                       <option value="">Bitte wählen</option>
-                      {kulturpflanzenListe.map((k, i) => (
-                        <option key={i} value={k.name}>{k.name}</option>
+                      {aktiveKulturpflanzen.map(k => (
+                        <option key={k.id} value={k.name}>{k.name}</option>
                       ))}
                     </select>
                     <button
@@ -637,8 +800,8 @@ const Dashboard = ({ session }: { session: any }) => {
                       required
                     >
                       <option value="">Bitte wählen</option>
-                      {pflanzenschutzmittelListe.map((p, i) => (
-                        <option key={i} value={p.mittel}>{p.mittel}</option>
+                      {aktivePsm.map(p => (
+                        <option key={p.id} value={p.mittel}>{p.mittel}</option>
                       ))}
                     </select>
                     <button
@@ -704,9 +867,9 @@ const Dashboard = ({ session }: { session: any }) => {
                       onChange={(e) => setAufwandsmengeEinheit(e.target.value)}
                     >
                       <option value="g">g</option>
-                      <option value="ml">ml</option>
-                      <option value="l">l</option>
                       <option value="kg">kg</option>
+                      <option value="l">l</option>
+                      <option value="ml">ml</option>
                     </select>
                   </div>
                 </div>
@@ -721,8 +884,8 @@ const Dashboard = ({ session }: { session: any }) => {
                       required
                     >
                       <option value="">Bitte wählen</option>
-                      {bbchStadienListe.map((b, i) => (
-                        <option key={i} value={b}>{b}</option>
+                      {aktiveBbch.map(b => (
+                        <option key={b.id} value={b.stadium}>{b.stadium}</option>
                       ))}
                     </select>
                     <button
