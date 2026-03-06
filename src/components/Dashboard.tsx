@@ -118,6 +118,13 @@ const Dashboard = ({ session }: { session: any }) => {
   const [showNewBbch, setShowNewBbch] = useState(false)
   const [newBbch, setNewBbch] = useState('')
 
+  // Nur aktive Einträge für Dropdowns (alphabetisch bereits sortiert)
+  const aktiveVerwendungen = useMemo(() => verwendungsarten.filter(v => v.aktiv), [verwendungsarten])
+  const aktiveFlaechen = useMemo(() => flaechenListe.filter(f => f.aktiv), [flaechenListe])
+  const aktiveKulturpflanzen = useMemo(() => kulturpflanzenListe.filter(k => k.aktiv), [kulturpflanzenListe])
+  const aktivePsm = useMemo(() => pflanzenschutzmittelListe.filter(p => p.aktiv), [pflanzenschutzmittelListe])
+  const aktiveBbch = useMemo(() => bbchStadienListe.filter(b => b.aktiv), [bbchStadienListe])
+
   useEffect(() => {
     loadUserData()
     loadEntries()
@@ -463,13 +470,6 @@ const Dashboard = ({ session }: { session: any }) => {
       setZulassungsnummer(psm.nummer)
     }
   }
-
-  // Nur aktive Einträge für Dropdowns (alphabetisch bereits sortiert)
-  const aktiveVerwendungen = useMemo(() => verwendungsarten.filter(v => v.aktiv), [verwendungsarten])
-  const aktiveFlaechen = useMemo(() => flaechenListe.filter(f => f.aktiv), [flaechenListe])
-  const aktiveKulturpflanzen = useMemo(() => kulturpflanzenListe.filter(k => k.aktiv), [kulturpflanzenListe])
-  const aktivePsm = useMemo(() => pflanzenschutzmittelListe.filter(p => p.aktiv), [pflanzenschutzmittelListe])
-  const aktiveBbch = useMemo(() => bbchStadienListe.filter(b => b.aktiv), [bbchStadienListe])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
