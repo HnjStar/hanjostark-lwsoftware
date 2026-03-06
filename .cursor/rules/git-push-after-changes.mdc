@@ -1,0 +1,14 @@
+---
+description: Nach Änderungen immer committen und pushen
+alwaysApply: true
+---
+
+# Git: Push nach jeder Änderung
+
+Nach **jeder Codeänderung** in diesem Projekt:
+
+1. `git add` der geänderten Dateien
+2. `git commit` mit aussagekräftiger Nachricht
+3. `git push origin main`
+
+Das direkt nach der Änderung ausführen, nicht vergessen.
