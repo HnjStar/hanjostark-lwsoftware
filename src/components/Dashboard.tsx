@@ -214,12 +214,14 @@ const Dashboard = ({ session }: { session: any }) => {
 
   const loadDropdownData = async () => {
     try {
+      // select('*') lädt alle Spalten – funktioniert auch ohne aktiv-Spalte (vor Migration)
+      // v.aktiv !== false: wenn aktiv fehlt (undefined), gilt als aktiv (keine Datenverlust-Gefahr)
       const [verwendungen, psm, kulturen, flaechen, bbch] = await Promise.all([
-        supabase.from('verwendungsarten').select('id, name, aktiv'),
-        supabase.from('pflanzenschutzmittel').select('id, mittel, zulassungsnummer, aktiv'),
-        supabase.from('kulturpflanzen').select('id, name, eppo_code, aktiv'),
-        supabase.from('flaechen').select('id, alias, fid, gps, aktiv'),
-        supabase.from('bbch_stadien').select('id, stadium, aktiv')
+        supabase.from('verwendungsarten').select('*'),
+        supabase.from('pflanzenschutzmittel').select('*'),
+        supabase.from('kulturpflanzen').select('*'),
+        supabase.from('flaechen').select('*'),
+        supabase.from('bbch_stadien').select('*')
       ])
 
       if (verwendungen.data) {
@@ -234,7 +236,7 @@ const Dashboard = ({ session }: { session: any }) => {
         setPflanzenschutzmittelListe(psm.data.map((p: any) => ({
           id: p.id,
           mittel: p.mittel,
-          nummer: p.zulassungsnummer,
+          nummer: p.zulassungsnummer || '',
           aktiv: p.aktiv !== false
         })).sort((a, b) => a.mittel.localeCompare(b.mittel, 'de')))
       }
@@ -264,6 +266,12 @@ const Dashboard = ({ session }: { session: any }) => {
           stadium: b.stadium,
           aktiv: b.aktiv !== false
         })).sort((a, b) => a.stadium.localeCompare(b.stadium, 'de')))
+      }
+
+      // Fehler loggen, falls Abfragen fehlschlagen (Daten bleiben in DB!)
+      const errors = [verwendungen.error, psm.error, kulturen.error, flaechen.error, bbch.error].filter(Boolean)
+      if (errors.length > 0) {
+        console.error('Fehler beim Laden einiger Listen:', errors)
       }
     } catch (error) {
       console.error('Fehler beim Laden der Dropdown-Daten:', error)
@@ -439,7 +447,13 @@ const Dashboard = ({ session }: { session: any }) => {
         .update({ aktiv })
         .eq('id', id)
       
-      if (error) throw error
+      if (error) {
+        if (error.message?.includes('aktiv') || error.message?.includes('column')) {
+          alert('Aktiv/Inaktiv-Funktion: Bitte führen Sie die Migration (supabase-migration-aktiv.sql) in der Supabase-Konsole aus.')
+          return
+        }
+        throw error
+      }
       loadDropdownData()
     } catch (error: any) {
       alert('Fehler: ' + error.message)
