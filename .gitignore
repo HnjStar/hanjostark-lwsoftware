@@ -12,6 +12,16 @@ dist
 dist-ssr
 *.local
 
+# Lokale DB-Backups (können personenbezogene / sensible Daten enthalten)
+backups/*.sql
+backups/*.dump
+backups/*.gz
+!backups/README.md
+!backups/.gitkeep
+
+# Optional: lokale DB-URL für Backups (niemals committen)
+.env.backup.local
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
