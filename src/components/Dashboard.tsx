@@ -13,6 +13,8 @@ interface Entry {
   startzeitpunkt: string
   aufwandsmenge_wert: number
   aufwandsmenge_einheit: string
+  behandelte_flaeche_wert?: number | null
+  behandelte_flaeche_einheit?: string | null
   kulturpflanze: string
   flaeche_alias: string
   flaeche_fid: string
@@ -63,6 +65,46 @@ interface BbchStadium {
   aktiv: boolean
 }
 
+/** Komma oder Punkt als Dezimaltrennzeichen */
+function parseDecimalInput(raw: string): number {
+  const n = parseFloat(raw.trim().replace(/\s/g, '').replace(',', '.'))
+  return n
+}
+
+const AUFWANDSMENGE_EINHEIT_GRUPPEN: { label: string; options: { value: string; label: string }[] }[] = [
+  {
+    label: 'Absolute Menge',
+    options: [
+      { value: 'g', label: 'g' },
+      { value: 'kg', label: 'kg' },
+      { value: 'ml', label: 'ml' },
+      { value: 'l', label: 'l' }
+    ]
+  },
+  {
+    label: 'pro Fläche (z. B. Agrar)',
+    options: [
+      { value: 'l/ha', label: 'l/ha' },
+      { value: 'ml/ha', label: 'ml/ha' },
+      { value: 'kg/ha', label: 'kg/ha' },
+      { value: 'g/ha', label: 'g/ha' }
+    ]
+  },
+  {
+    label: 'Saatgut / Erzeugnis (pro Masse)',
+    options: [
+      { value: 'ml/kg', label: 'ml/kg' },
+      { value: 'g/kg', label: 'g/kg' },
+      { value: 'l/t', label: 'l/t' },
+      { value: 'ml/t', label: 'ml/t' },
+      { value: 'g/t', label: 'g/t' },
+      { value: 'kg/t', label: 'kg/t' }
+    ]
+  }
+]
+
+const BEHANDELTE_FL_EINHEITEN = ['ha', 't', 'kg', 'm²'] as const
+
 const Dashboard = ({ session }: { session: any }) => {
   const [user, setUser] = useState<User>({ name: '', vorname: '' })
   const [entries, setEntries] = useState<Entry[]>([])
@@ -88,6 +130,8 @@ const Dashboard = ({ session }: { session: any }) => {
   const [zulassungsnummer, setZulassungsnummer] = useState('')
   const [aufwandsmengeWert, setAufwandsmengeWert] = useState('')
   const [aufwandsmengeEinheit, setAufwandsmengeEinheit] = useState('l')
+  const [behandelteFlaecheWert, setBehandelteFlaecheWert] = useState('')
+  const [behandelteFlaecheEinheit, setBehandelteFlaecheEinheit] = useState<string>('ha')
   const [bbchStadium, setBbchStadium] = useState('')
   const [anwendungsdatum, setAnwendungsdatum] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [startzeitpunkt, setStartzeitpunkt] = useState(format(new Date(), 'HH:mm'))
@@ -285,6 +329,20 @@ const Dashboard = ({ session }: { session: any }) => {
 
     try {
       const { data: { user: authUser } } = await supabase.auth.getUser()
+
+      const aufwandWert = parseDecimalInput(aufwandsmengeWert)
+      if (Number.isNaN(aufwandWert) || aufwandWert < 0) {
+        alert('Bitte eine gültige Aufwandsmenge eingeben.')
+        setLoading(false)
+        return
+      }
+
+      const bfWert = parseDecimalInput(behandelteFlaecheWert)
+      if (Number.isNaN(bfWert) || bfWert <= 0) {
+        alert('Bitte die behandelte Fläche bzw. Einheit angeben (z. B. 1,1 bei Einheit ha oder 550 bei Einheit kg).')
+        setLoading(false)
+        return
+      }
       
       const payload = {
         art_der_verwendung: artDerVerwendung,
@@ -292,8 +350,10 @@ const Dashboard = ({ session }: { session: any }) => {
         zulassungsnummer: zulassungsnummer,
         anwendungsdatum: anwendungsdatum,
         startzeitpunkt: startzeitpunkt,
-        aufwandsmenge_wert: parseFloat(aufwandsmengeWert),
+        aufwandsmenge_wert: aufwandWert,
         aufwandsmenge_einheit: aufwandsmengeEinheit,
+        behandelte_flaeche_wert: bfWert,
+        behandelte_flaeche_einheit: behandelteFlaecheEinheit,
         kulturpflanze: kulturpflanze,
         flaeche_alias: flaecheAlias,
         flaeche_fid: flaecheFid,
@@ -325,7 +385,12 @@ const Dashboard = ({ session }: { session: any }) => {
       loadEntries()
       setShowForm(false)
     } catch (error: any) {
-      alert('Fehler beim Speichern: ' + error.message)
+      const msg = error.message || String(error)
+      if (msg.includes('behandelte_flaeche') || msg.includes('schema cache')) {
+        alert('Datenbank: Bitte die Migration supabase-migration-behandelte-flaeche.sql in der Supabase-Konsole ausführen.\n\n' + msg)
+      } else {
+        alert('Fehler beim Speichern: ' + msg)
+      }
     } finally {
       setLoading(false)
     }
@@ -343,7 +408,13 @@ const Dashboard = ({ session }: { session: any }) => {
     setPflanzenschutzmittel(entry.pflanzenschutzmittel)
     setZulassungsnummer(entry.zulassungsnummer)
     setAufwandsmengeWert(String(entry.aufwandsmenge_wert))
-    setAufwandsmengeEinheit(entry.aufwandsmenge_einheit)
+    setAufwandsmengeEinheit(entry.aufwandsmenge_einheit || 'l')
+    setBehandelteFlaecheWert(
+      entry.behandelte_flaeche_wert != null && entry.behandelte_flaeche_wert !== undefined
+        ? String(entry.behandelte_flaeche_wert).replace('.', ',')
+        : ''
+    )
+    setBehandelteFlaecheEinheit(entry.behandelte_flaeche_einheit || 'ha')
     setBbchStadium(entry.bbch_stadium)
     const d = entry.anwendungsdatum
     setAnwendungsdatum(d ? d.slice(0, 10) : format(new Date(), 'yyyy-MM-dd'))
@@ -384,6 +455,8 @@ const Dashboard = ({ session }: { session: any }) => {
     setZulassungsnummer('')
     setAufwandsmengeWert('')
     setAufwandsmengeEinheit('l')
+    setBehandelteFlaecheWert('')
+    setBehandelteFlaecheEinheit('ha')
     setBbchStadium('')
     setAnwendungsdatum(format(new Date(), 'yyyy-MM-dd'))
     setStartzeitpunkt(format(new Date(), 'HH:mm'))
@@ -546,20 +619,24 @@ const Dashboard = ({ session }: { session: any }) => {
       const XLSX = await import('xlsx')
       
       const data = selectedEntries.map(entry => ({
+        'Schlagbezeichnung': entry.flaeche_alias,
         'Art der Verwendung': entry.art_der_verwendung,
-        'Fläche (Alias)': entry.flaeche_alias,
-        'Flurstücksnummer (FID)': entry.flaeche_fid,
-        'GPS-Daten': entry.flaeche_gps,
-        'Kulturpflanze': entry.kulturpflanze,
-        'EPPO Code': entry.eppo_code,
         'Pflanzenschutzmittel': entry.pflanzenschutzmittel,
         'Zulassungsnummer': entry.zulassungsnummer,
-        'Aufwandsmenge': `${entry.aufwandsmenge_wert} ${entry.aufwandsmenge_einheit}`,
-        'BBCH Stadium': entry.bbch_stadium,
         'Anwendungsdatum': entry.anwendungsdatum,
         'Startzeitpunkt': entry.startzeitpunkt,
-        'Name': entry.user_name,
-        'Vorname': entry.user_vorname,
+        'Aufwandsmenge': `${entry.aufwandsmenge_wert} ${entry.aufwandsmenge_einheit}`,
+        'Kulturpflanze/Pflanzenerzeugnis': entry.kulturpflanze,
+        'Behandelte Fläche bzw. Einheit':
+          entry.behandelte_flaeche_wert != null && entry.behandelte_flaeche_einheit
+            ? `${entry.behandelte_flaeche_wert} ${entry.behandelte_flaeche_einheit}`
+            : '',
+        'EPPO-Code': entry.eppo_code,
+        'BBCH Kultur': entry.bbch_stadium,
+        'Flurstücksnummer (FID)': entry.flaeche_fid,
+        'GPS-Daten': entry.flaeche_gps,
+        'Name des Anwenders': entry.user_name,
+        'Vorname des Anwenders': entry.user_vorname,
         'Erstellt am': entry.created_at ? format(new Date(entry.created_at), 'dd.MM.yyyy HH:mm', { locale: de }) : ''
       }))
 
@@ -932,23 +1009,51 @@ const Dashboard = ({ session }: { session: any }) => {
               <div className="form-row">
                 <div className="form-group">
                   <label>Aufwandsmenge *</label>
-                  <div className="amount-input">
+                  <p className="field-hint">z. B. absolute Menge (l, ml) oder Verhältnis wie l/ha, ml/kg bei Saatgut</p>
+                  <div className="amount-input amount-input-wide">
                     <input
-                      type="number"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       value={aufwandsmengeWert}
                       onChange={(e) => setAufwandsmengeWert(e.target.value)}
-                      placeholder="Wert"
+                      placeholder="z. B. 1,75"
                       required
                     />
                     <select
                       value={aufwandsmengeEinheit}
                       onChange={(e) => setAufwandsmengeEinheit(e.target.value)}
+                      className="select-einheit"
                     >
-                      <option value="g">g</option>
-                      <option value="kg">kg</option>
-                      <option value="l">l</option>
-                      <option value="ml">ml</option>
+                      {AUFWANDSMENGE_EINHEIT_GRUPPEN.map((gruppe) => (
+                        <optgroup key={gruppe.label} label={gruppe.label}>
+                          {gruppe.options.map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>Behandelte Fläche bzw. Einheit *</label>
+                  <p className="field-hint">Fläche, die behandelt wurde, z. B. 2,25 ha oder bei Saatgut 15 t</p>
+                  <div className="amount-input amount-input-wide">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={behandelteFlaecheWert}
+                      onChange={(e) => setBehandelteFlaecheWert(e.target.value)}
+                      placeholder="z. B. 1,1"
+                      required
+                    />
+                    <select
+                      value={behandelteFlaecheEinheit}
+                      onChange={(e) => setBehandelteFlaecheEinheit(e.target.value)}
+                    >
+                      {BEHANDELTE_FL_EINHEITEN.map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -1161,7 +1266,10 @@ const Dashboard = ({ session }: { session: any }) => {
                   <p><strong>Fläche:</strong> {entry.flaeche_alias}</p>
                   {entry.flaeche_fid && <p><strong>FID:</strong> {entry.flaeche_fid}</p>}
                   <p><strong>Mittel:</strong> {entry.pflanzenschutzmittel}</p>
-                  <p><strong>Menge:</strong> {entry.aufwandsmenge_wert} {entry.aufwandsmenge_einheit}</p>
+                  <p><strong>Aufwandsmenge:</strong> {entry.aufwandsmenge_wert} {entry.aufwandsmenge_einheit}</p>
+                  {entry.behandelte_flaeche_wert != null && entry.behandelte_flaeche_einheit && (
+                    <p><strong>Behandelte Fläche:</strong> {entry.behandelte_flaeche_wert} {entry.behandelte_flaeche_einheit}</p>
+                  )}
                   <p><strong>EPPO:</strong> {entry.eppo_code}</p>
                 </div>
               </div>

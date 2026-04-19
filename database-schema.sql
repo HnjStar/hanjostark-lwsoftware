@@ -78,6 +78,8 @@ CREATE TABLE IF NOT EXISTS eintraege (
   flaeche_gps TEXT,
   eppo_code TEXT NOT NULL,
   bbch_stadium TEXT NOT NULL,
+  behandelte_flaeche_wert DECIMAL(14, 4),
+  behandelte_flaeche_einheit TEXT,
   user_name TEXT,
   user_vorname TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
