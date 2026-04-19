@@ -114,6 +114,10 @@ const AUFWANDSMENGE_EINHEIT_GRUPPEN: { label: string; options: { value: string; 
 
 const BEHANDELTE_FL_EINHEITEN = ['ha', 't', 'kg', 'm²'] as const
 
+const AUFWANDSMENGE_ALLE_EINHEITEN: string[] = AUFWANDSMENGE_EINHEIT_GRUPPEN.flatMap((g) =>
+  g.options.map((o) => o.value)
+)
+
 const Dashboard = ({ session }: { session: any }) => {
   const [user, setUser] = useState<User>({ name: '', vorname: '' })
   const [entries, setEntries] = useState<Entry[]>([])
@@ -342,6 +346,37 @@ const Dashboard = ({ session }: { session: any }) => {
     try {
       const { data: { user: authUser } } = await supabase.auth.getUser()
 
+      if (!artDerVerwendung.trim()) {
+        alert('Bitte „Art der Verwendung“ wählen.')
+        setLoading(false)
+        return
+      }
+      if (!flaecheAlias.trim()) {
+        alert('Bitte eine behandelte Fläche (Schlag) wählen.')
+        setLoading(false)
+        return
+      }
+      if (!kulturpflanze.trim()) {
+        alert('Bitte eine Kulturpflanze wählen.')
+        setLoading(false)
+        return
+      }
+      if (!pflanzenschutzmittel.trim()) {
+        alert('Bitte ein Pflanzenschutzmittel wählen.')
+        setLoading(false)
+        return
+      }
+      if (!zulassungsnummer.trim()) {
+        alert('Bitte die Zulassungsnummer eintragen.')
+        setLoading(false)
+        return
+      }
+      if (!bbchStadium.trim()) {
+        alert('Bitte ein BBCH-Stadium wählen.')
+        setLoading(false)
+        return
+      }
+
       const aufwandWert = parseDecimalInput(aufwandsmengeWert)
       if (Number.isNaN(aufwandWert) || aufwandWert < 0) {
         alert('Bitte eine gültige Aufwandsmenge eingeben.')
@@ -350,8 +385,10 @@ const Dashboard = ({ session }: { session: any }) => {
       }
 
       const bfWert = parseDecimalInput(behandelteFlaecheWert)
-      if (Number.isNaN(bfWert) || bfWert <= 0) {
-        alert('Bitte die behandelte Fläche bzw. Einheit angeben (z. B. 1,1 bei Einheit ha oder 550 bei Einheit kg).')
+      if (behandelteFlaecheWert.trim() === '' || Number.isNaN(bfWert) || bfWert <= 0) {
+        alert(
+          'Bitte „Behandelte Fläche bzw. Einheit“ ausfüllen: eine positive Zahl (z. B. 1,1 oder 1098) und die passende Einheit (ha, t, kg …).'
+        )
         setLoading(false)
         return
       }
@@ -817,7 +854,7 @@ const Dashboard = ({ session }: { session: any }) => {
         {showForm && (
           <div className="form-container">
             <h2>{editingEntryId != null ? 'Eintrag bearbeiten' : 'Neuer Eintrag'}</h2>
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} noValidate>
               {/* 1. Art der Verwendung */}
               <div className="form-row">
                 <div className="form-group">
@@ -828,6 +865,13 @@ const Dashboard = ({ session }: { session: any }) => {
                       onChange={(e) => setArtDerVerwendung(e.target.value)}
                       required
                     >
+                      {editingEntryId != null &&
+                        artDerVerwendung &&
+                        !aktiveVerwendungen.some((v) => v.name === artDerVerwendung) && (
+                          <option value={artDerVerwendung}>
+                            {artDerVerwendung} (gespeicherter Wert)
+                          </option>
+                        )}
                       {aktiveVerwendungen.map(v => (
                         <option key={v.id} value={v.name}>{v.name}</option>
                       ))}
@@ -870,6 +914,11 @@ const Dashboard = ({ session }: { session: any }) => {
                       required
                     >
                       <option value="">Bitte wählen</option>
+                      {editingEntryId != null &&
+                        flaecheAlias &&
+                        !aktiveFlaechen.some((f) => f.alias === flaecheAlias) && (
+                          <option value={flaecheAlias}>{flaecheAlias} (gespeicherter Wert)</option>
+                        )}
                       {aktiveFlaechen.map(f => (
                         <option key={f.id} value={f.alias}>{f.alias}</option>
                       ))}
@@ -932,6 +981,11 @@ const Dashboard = ({ session }: { session: any }) => {
                       required
                     >
                       <option value="">Bitte wählen</option>
+                      {editingEntryId != null &&
+                        kulturpflanze &&
+                        !aktiveKulturpflanzen.some((k) => k.name === kulturpflanze) && (
+                          <option value={kulturpflanze}>{kulturpflanze} (gespeicherter Wert)</option>
+                        )}
                       {aktiveKulturpflanzen.map(k => (
                         <option key={k.id} value={k.name}>{k.name}</option>
                       ))}
@@ -986,6 +1040,13 @@ const Dashboard = ({ session }: { session: any }) => {
                       required
                     >
                       <option value="">Bitte wählen</option>
+                      {editingEntryId != null &&
+                        pflanzenschutzmittel &&
+                        !aktivePsm.some((p) => p.mittel === pflanzenschutzmittel) && (
+                          <option value={pflanzenschutzmittel}>
+                            {pflanzenschutzmittel} (gespeicherter Wert)
+                          </option>
+                        )}
                       {aktivePsm.map(p => (
                         <option key={p.id} value={p.mittel}>{p.mittel}</option>
                       ))}
@@ -1054,6 +1115,13 @@ const Dashboard = ({ session }: { session: any }) => {
                       onChange={(e) => setAufwandsmengeEinheit(e.target.value)}
                       className="select-einheit"
                     >
+                      {editingEntryId != null &&
+                        aufwandsmengeEinheit &&
+                        !AUFWANDSMENGE_ALLE_EINHEITEN.includes(aufwandsmengeEinheit) && (
+                          <option value={aufwandsmengeEinheit}>
+                            {aufwandsmengeEinheit} (gespeicherter Wert)
+                          </option>
+                        )}
                       {AUFWANDSMENGE_EINHEIT_GRUPPEN.map((gruppe) => (
                         <optgroup key={gruppe.label} label={gruppe.label}>
                           {gruppe.options.map((o) => (
@@ -1081,6 +1149,13 @@ const Dashboard = ({ session }: { session: any }) => {
                       value={behandelteFlaecheEinheit}
                       onChange={(e) => setBehandelteFlaecheEinheit(e.target.value)}
                     >
+                      {editingEntryId != null &&
+                        behandelteFlaecheEinheit &&
+                        !(BEHANDELTE_FL_EINHEITEN as readonly string[]).includes(behandelteFlaecheEinheit) && (
+                          <option value={behandelteFlaecheEinheit}>
+                            {behandelteFlaecheEinheit} (gespeicherter Wert)
+                          </option>
+                        )}
                       {BEHANDELTE_FL_EINHEITEN.map((u) => (
                         <option key={u} value={u}>{u}</option>
                       ))}
@@ -1098,6 +1173,11 @@ const Dashboard = ({ session }: { session: any }) => {
                       required
                     >
                       <option value="">Bitte wählen</option>
+                      {editingEntryId != null &&
+                        bbchStadium &&
+                        !aktiveBbch.some((b) => b.stadium === bbchStadium) && (
+                          <option value={bbchStadium}>{bbchStadium} (gespeicherter Wert)</option>
+                        )}
                       {aktiveBbch.map(b => (
                         <option key={b.id} value={b.stadium}>{b.stadium}</option>
                       ))}
