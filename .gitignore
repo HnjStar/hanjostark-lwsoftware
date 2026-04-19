@@ -21,6 +21,7 @@ backups/*.gz
 
 # Optional: lokale DB-URL für Backups (niemals committen)
 .env.backup.local
+backups/db-url.txt
 
 # Editor directories and files
 .vscode/*
