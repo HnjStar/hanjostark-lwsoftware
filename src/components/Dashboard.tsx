@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { de } from 'date-fns/locale'
 import './Dashboard.css'
 
@@ -617,28 +617,46 @@ const Dashboard = ({ session }: { session: any }) => {
   const exportToExcel = async (selectedEntries: Entry[] = filteredEntries.length > 0 ? filteredEntries : entries) => {
     try {
       const XLSX = await import('xlsx')
-      
-      const data = selectedEntries.map(entry => ({
-        'Schlagbezeichnung': entry.flaeche_alias,
-        'Art der Verwendung': entry.art_der_verwendung,
-        'Pflanzenschutzmittel': entry.pflanzenschutzmittel,
-        'Zulassungsnummer': entry.zulassungsnummer,
-        'Anwendungsdatum': entry.anwendungsdatum,
-        'Startzeitpunkt': entry.startzeitpunkt,
-        'Aufwandsmenge': `${entry.aufwandsmenge_wert} ${entry.aufwandsmenge_einheit}`,
-        'Kulturpflanze/Pflanzenerzeugnis': entry.kulturpflanze,
-        'Behandelte Fläche bzw. Einheit':
+
+      const formatDatumDe = (isoDate: string) => {
+        try {
+          return format(parseISO(isoDate.slice(0, 10)), 'dd.MM.yyyy', { locale: de })
+        } catch {
+          return isoDate
+        }
+      }
+
+      const formatZeitExport = (t: string | undefined) => {
+        if (!t) return ''
+        const s = String(t)
+        return s.length >= 8 && s.includes(':') ? s.slice(0, 5) : s.slice(0, 5)
+      }
+
+      // Feste Spaltenreihenfolge (LfL / elektronische Aufzeichnung); ohne „Erstellt am“
+      const data = selectedEntries.map((entry) => {
+        const behandelt =
           entry.behandelte_flaeche_wert != null && entry.behandelte_flaeche_einheit
-            ? `${entry.behandelte_flaeche_wert} ${entry.behandelte_flaeche_einheit}`
-            : '',
-        'EPPO-Code': entry.eppo_code,
-        'BBCH Kultur': entry.bbch_stadium,
-        'Flurstücksnummer (FID)': entry.flaeche_fid,
-        'GPS-Daten': entry.flaeche_gps,
-        'Name des Anwenders': entry.user_name,
-        'Vorname des Anwenders': entry.user_vorname,
-        'Erstellt am': entry.created_at ? format(new Date(entry.created_at), 'dd.MM.yyyy HH:mm', { locale: de }) : ''
-      }))
+            ? `${entry.behandelte_flaeche_wert} ${entry.behandelte_flaeche_einheit}`.trim()
+            : ''
+
+        return {
+          Schlagbezeichnung: entry.flaeche_alias ?? '',
+          'Art der Verwendung': entry.art_der_verwendung ?? '',
+          Pflanzenschutzmittel: entry.pflanzenschutzmittel ?? '',
+          Zulassungsnummer: entry.zulassungsnummer ?? '',
+          Anwendungsdatum: formatDatumDe(entry.anwendungsdatum),
+          Startzeitpunkt: formatZeitExport(entry.startzeitpunkt),
+          Aufwandsmenge: `${entry.aufwandsmenge_wert ?? ''} ${entry.aufwandsmenge_einheit ?? ''}`.trim(),
+          'Kulturpflanze/Pflanzenerzeugnis': entry.kulturpflanze ?? '',
+          'Behandelte Fläche bzw. Einheit': behandelt,
+          'EPPO-Code': entry.eppo_code ?? '',
+          'BBCH Kultur': entry.bbch_stadium ?? '',
+          'Flurstücksnummer (FID/InVeKoS)': entry.flaeche_fid ?? '',
+          'GPS-Daten': entry.flaeche_gps ?? '',
+          'Name des Anwenders': entry.user_name ?? '',
+          'Vorname des Anwenders': entry.user_vorname ?? ''
+        }
+      })
 
       const ws = XLSX.utils.json_to_sheet(data)
       const wb = XLSX.utils.book_new()
