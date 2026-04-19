@@ -71,6 +71,15 @@ function parseDecimalInput(raw: string): number {
   return n
 }
 
+/** InVeKoS-Schlagskennung: gespeicherte reine Ziffern-FID mit DEBYLI0 anzeigen, falls noch kein Präfix in der DB */
+function formatFidInVeKoS(fid: string | null | undefined): string {
+  if (fid == null || String(fid).trim() === '') return ''
+  const s = String(fid).trim()
+  if (/^DEBYLI/i.test(s)) return s
+  if (/^[0-9]+$/.test(s)) return `DEBYLI0${s}`
+  return s
+}
+
 const AUFWANDSMENGE_EINHEIT_GRUPPEN: { label: string; options: { value: string; label: string }[] }[] = [
   {
     label: 'Absolute Menge',
@@ -194,9 +203,12 @@ const Dashboard = ({ session }: { session: any }) => {
     }
     
     if (filterFid) {
-      filtered = filtered.filter(e => 
-        e.flaeche_fid?.toLowerCase().includes(filterFid.toLowerCase())
-      )
+      const q = filterFid.toLowerCase()
+      filtered = filtered.filter(e => {
+        const raw = (e.flaeche_fid || '').toLowerCase()
+        const formatted = formatFidInVeKoS(e.flaeche_fid || '').toLowerCase()
+        return raw.includes(q) || formatted.includes(q)
+      })
     }
     
     if (filterDatumVon) {
@@ -651,7 +663,7 @@ const Dashboard = ({ session }: { session: any }) => {
           'Behandelte Fläche bzw. Einheit': behandelt,
           'EPPO-Code': entry.eppo_code ?? '',
           'BBCH Kultur': entry.bbch_stadium ?? '',
-          'Flurstücksnummer (FID/InVeKoS)': entry.flaeche_fid ?? '',
+          'Flurstücksnummer (FID/InVeKoS)': formatFidInVeKoS(entry.flaeche_fid ?? ''),
           'GPS-Daten': entry.flaeche_gps ?? '',
           'Name des Anwenders': entry.user_name ?? '',
           'Vorname des Anwenders': entry.user_vorname ?? ''
@@ -743,7 +755,7 @@ const Dashboard = ({ session }: { session: any }) => {
                 ))}
                 {verwaltungTab === 'flaeche' && flaechenListe.map(f => (
                   <div key={f.id} className={`listen-item ${!f.aktiv ? 'inaktiv' : ''}`}>
-                    <span>{f.alias}{f.fid && ` (${f.fid})`}</span>
+                    <span>{f.alias}{f.fid && ` (${formatFidInVeKoS(f.fid)})`}</span>
                     <label className="toggle-label">
                       <input
                         type="checkbox"
@@ -872,7 +884,7 @@ const Dashboard = ({ session }: { session: any }) => {
                   </div>
                   {flaecheFid && (
                     <div className="flaeche-details">
-                      <small>FID: {flaecheFid}</small>
+                      <small>FID: {formatFidInVeKoS(flaecheFid)}</small>
                       {flaecheGps && <small>GPS: {flaecheGps}</small>}
                     </div>
                   )}
@@ -1282,7 +1294,9 @@ const Dashboard = ({ session }: { session: any }) => {
                   <p><strong>Datum:</strong> {format(new Date(entry.anwendungsdatum), 'dd.MM.yyyy', { locale: de })}</p>
                   <p><strong>Zeit:</strong> {entry.startzeitpunkt}</p>
                   <p><strong>Fläche:</strong> {entry.flaeche_alias}</p>
-                  {entry.flaeche_fid && <p><strong>FID:</strong> {entry.flaeche_fid}</p>}
+                  {entry.flaeche_fid && (
+                    <p><strong>FID:</strong> {formatFidInVeKoS(entry.flaeche_fid)}</p>
+                  )}
                   <p><strong>Mittel:</strong> {entry.pflanzenschutzmittel}</p>
                   <p><strong>Aufwandsmenge:</strong> {entry.aufwandsmenge_wert} {entry.aufwandsmenge_einheit}</p>
                   {entry.behandelte_flaeche_wert != null && entry.behandelte_flaeche_einheit && (
