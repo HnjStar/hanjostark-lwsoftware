@@ -149,6 +149,13 @@ CREATE POLICY "Users can view own entries" ON eintraege
 CREATE POLICY "Users can insert own entries" ON eintraege
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+CREATE POLICY "Users can update own entries" ON eintraege
+  FOR UPDATE USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own entries" ON eintraege
+  FOR DELETE USING (auth.uid() = user_id);
+
 -- Standardwerte einfügen (optional)
 INSERT INTO verwendungsarten (name) VALUES 
   ('Agrarfläche'),

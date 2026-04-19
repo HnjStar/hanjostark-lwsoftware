@@ -543,6 +543,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   margin-bottom: 15px;
   padding-bottom: 15px;
   border-bottom: 2px solid #e0e0e0;
@@ -552,6 +553,50 @@
   color: #667eea;
   margin: 0;
   font-size: 18px;
+  flex: 1;
+  min-width: 0;
+}
+
+.entry-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.entry-action-button {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.entry-action-button:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+
+.entry-action-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.entry-action-button.edit {
+  background: #e3f2fd;
+}
+
+.entry-action-button.edit:hover:not(:disabled) {
+  background: #bbdefb;
+}
+
+.entry-action-button.delete {
+  background: #ffebee;
+}
+
+.entry-action-button.delete:hover:not(:disabled) {
+  background: #ffcdd2;
 }
 
 .export-button {

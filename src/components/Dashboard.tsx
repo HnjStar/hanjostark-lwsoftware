@@ -68,6 +68,7 @@ const Dashboard = ({ session }: { session: any }) => {
   const [entries, setEntries] = useState<Entry[]>([])
   const [filteredEntries, setFilteredEntries] = useState<Entry[]>([])
   const [showForm, setShowForm] = useState(false)
+  const [editingEntryId, setEditingEntryId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   
   // Filter State
@@ -285,8 +286,7 @@ const Dashboard = ({ session }: { session: any }) => {
     try {
       const { data: { user: authUser } } = await supabase.auth.getUser()
       
-      const entry = {
-        user_id: authUser?.id,
+      const payload = {
         art_der_verwendung: artDerVerwendung,
         pflanzenschutzmittel: pflanzenschutzmittel,
         zulassungsnummer: zulassungsnummer,
@@ -304,13 +304,23 @@ const Dashboard = ({ session }: { session: any }) => {
         user_vorname: user.vorname
       }
 
-      const { error } = await supabase
-        .from('eintraege')
-        .insert([entry])
+      if (editingEntryId != null) {
+        const { error } = await supabase
+          .from('eintraege')
+          .update(payload)
+          .eq('id', editingEntryId)
 
-      if (error) throw error
+        if (error) throw error
+        alert('Eintrag wurde aktualisiert.')
+      } else {
+        const { error } = await supabase
+          .from('eintraege')
+          .insert([{ ...payload, user_id: authUser?.id }])
 
-      alert('Eintrag erfolgreich gespeichert!')
+        if (error) throw error
+        alert('Eintrag erfolgreich gespeichert!')
+      }
+
       resetForm()
       loadEntries()
       setShowForm(false)
@@ -321,7 +331,49 @@ const Dashboard = ({ session }: { session: any }) => {
     }
   }
 
+  const startEditEntry = (entry: Entry) => {
+    if (entry.id == null) return
+    setEditingEntryId(entry.id)
+    setArtDerVerwendung(entry.art_der_verwendung)
+    setFlaecheAlias(entry.flaeche_alias)
+    setFlaecheFid(entry.flaeche_fid || '')
+    setFlaecheGps(entry.flaeche_gps || '')
+    setKulturpflanze(entry.kulturpflanze)
+    setEppoCode(entry.eppo_code)
+    setPflanzenschutzmittel(entry.pflanzenschutzmittel)
+    setZulassungsnummer(entry.zulassungsnummer)
+    setAufwandsmengeWert(String(entry.aufwandsmenge_wert))
+    setAufwandsmengeEinheit(entry.aufwandsmenge_einheit)
+    setBbchStadium(entry.bbch_stadium)
+    const d = entry.anwendungsdatum
+    setAnwendungsdatum(d ? d.slice(0, 10) : format(new Date(), 'yyyy-MM-dd'))
+    const t = String(entry.startzeitpunkt || '')
+    setStartzeitpunkt(t.length >= 5 ? t.slice(0, 5) : t)
+    setShowForm(true)
+  }
+
+  const handleDeleteEntry = async (entry: Entry) => {
+    if (entry.id == null) return
+    if (!window.confirm('Diesen Eintrag wirklich löschen? Dies kann nicht rückgängig gemacht werden.')) return
+    setLoading(true)
+    try {
+      const { error } = await supabase.from('eintraege').delete().eq('id', entry.id)
+      if (error) throw error
+      loadEntries()
+    } catch (error: any) {
+      const msg = error.message || String(error)
+      if (msg.includes('policy') || msg.includes('permission') || msg.includes('42501')) {
+        alert('Löschen nicht erlaubt: Bitte in Supabase die Datei supabase-migration-eintraege-update-delete.sql im SQL Editor ausführen.')
+      } else {
+        alert('Löschen fehlgeschlagen: ' + msg)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const resetForm = () => {
+    setEditingEntryId(null)
     setArtDerVerwendung(aktiveVerwendungen[0]?.name ?? 'Agrarfläche')
     setFlaecheAlias('')
     setFlaecheFid('')
@@ -534,7 +586,20 @@ const Dashboard = ({ session }: { session: any }) => {
 
       <div className="dashboard-content">
         <div className="action-buttons">
-          <button onClick={() => setShowForm(!showForm)} className="action-button">
+          <button
+            type="button"
+            onClick={() => {
+              if (showForm) {
+                setEditingEntryId(null)
+                setShowForm(false)
+              } else {
+                setEditingEntryId(null)
+                resetForm()
+                setShowForm(true)
+              }
+            }}
+            className="action-button"
+          >
             {showForm ? 'Formular ausblenden' : 'Neuer Eintrag'}
           </button>
           <button onClick={() => setShowListenVerwalten(true)} className="action-button settings">
@@ -644,7 +709,7 @@ const Dashboard = ({ session }: { session: any }) => {
 
         {showForm && (
           <div className="form-container">
-            <h2>Neuer Eintrag</h2>
+            <h2>{editingEntryId != null ? 'Eintrag bearbeiten' : 'Neuer Eintrag'}</h2>
             <form onSubmit={handleSubmit}>
               {/* 1. Art der Verwendung */}
               <div className="form-row">
@@ -967,11 +1032,24 @@ const Dashboard = ({ session }: { session: any }) => {
 
               <div className="form-actions">
                 <button type="submit" disabled={loading} className="submit-button">
-                  {loading ? 'Speichert...' : 'Eintrag speichern'}
+                  {loading ? 'Speichert...' : editingEntryId != null ? 'Änderungen speichern' : 'Eintrag speichern'}
                 </button>
                 <button type="button" onClick={resetForm} className="reset-button">
                   Zurücksetzen
                 </button>
+                {editingEntryId != null && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingEntryId(null)
+                      resetForm()
+                      setShowForm(false)
+                    }}
+                    className="reset-button"
+                  >
+                    Bearbeiten abbrechen
+                  </button>
+                )}
               </div>
             </form>
           </div>
@@ -1049,13 +1127,33 @@ const Dashboard = ({ session }: { session: any }) => {
               <div key={entry.id} className="entry-card">
                 <div className="entry-header">
                   <h3>{entry.kulturpflanze}</h3>
-                  <button
-                    onClick={() => exportToExcel([entry])}
-                    className="export-button"
-                    title="Als Excel exportieren"
-                  >
-                    📥
-                  </button>
+                  <div className="entry-header-actions">
+                    <button
+                      type="button"
+                      onClick={() => startEditEntry(entry)}
+                      className="entry-action-button edit"
+                      title="Eintrag bearbeiten"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteEntry(entry)}
+                      className="entry-action-button delete"
+                      title="Eintrag löschen"
+                      disabled={loading}
+                    >
+                      🗑️
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => exportToExcel([entry])}
+                      className="export-button"
+                      title="Als Excel exportieren"
+                    >
+                      📥
+                    </button>
+                  </div>
                 </div>
                 <div className="entry-details">
                   <p><strong>Datum:</strong> {format(new Date(entry.anwendungsdatum), 'dd.MM.yyyy', { locale: de })}</p>
