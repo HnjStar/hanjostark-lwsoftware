@@ -414,12 +414,22 @@ const Dashboard = ({ session }: { session: any }) => {
       }
 
       if (editingEntryId != null) {
-        const { error } = await supabase
+        const { data: updatedRows, error } = await supabase
           .from('eintraege')
           .update(payload)
           .eq('id', editingEntryId)
+          .select('id')
 
         if (error) throw error
+        if (!updatedRows || updatedRows.length === 0) {
+          alert(
+            'Speichern hat keine Zeile geändert. Meist fehlen in Supabase die Rechte zum Bearbeiten:\n\n' +
+              'Im SQL Editor die Datei supabase-migration-eintraege-update-delete.sql ausführen.\n\n' +
+              'Oder der Eintrag gehört einem anderen Benutzer / user_id ist leer.'
+          )
+          setLoading(false)
+          return
+        }
         alert('Eintrag wurde aktualisiert.')
       } else {
         const { error } = await supabase
@@ -437,6 +447,17 @@ const Dashboard = ({ session }: { session: any }) => {
       const msg = error.message || String(error)
       if (msg.includes('behandelte_flaeche') || msg.includes('schema cache')) {
         alert('Datenbank: Bitte die Migration supabase-migration-behandelte-flaeche.sql in der Supabase-Konsole ausführen.\n\n' + msg)
+      } else if (
+        msg.includes('policy') ||
+        msg.includes('permission') ||
+        msg.includes('42501') ||
+        msg.toLowerCase().includes('row-level security')
+      ) {
+        alert(
+          'Keine Berechtigung (RLS). Bitte in Supabase im SQL Editor ausführen:\n\n' +
+            'supabase-migration-eintraege-update-delete.sql\n\n' +
+            msg
+        )
       } else {
         alert('Fehler beim Speichern: ' + msg)
       }
@@ -477,8 +498,21 @@ const Dashboard = ({ session }: { session: any }) => {
     if (!window.confirm('Diesen Eintrag wirklich löschen? Dies kann nicht rückgängig gemacht werden.')) return
     setLoading(true)
     try {
-      const { error } = await supabase.from('eintraege').delete().eq('id', entry.id)
+      const { data: deleted, error } = await supabase
+        .from('eintraege')
+        .delete()
+        .eq('id', entry.id)
+        .select('id')
+
       if (error) throw error
+      if (!deleted || deleted.length === 0) {
+        alert(
+          'Löschen hat keine Zeile entfernt. Häufige Ursache: Row Level Security erlaubt kein DELETE.\n\n' +
+            'In Supabase → SQL Editor die Datei supabase-migration-eintraege-update-delete.sql ausführen.\n\n' +
+            'Oder der Eintrag hat keine passende user_id zu deinem Login.'
+        )
+        return
+      }
       loadEntries()
     } catch (error: any) {
       const msg = error.message || String(error)
